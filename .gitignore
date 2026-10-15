@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Solar dryer simulator: generated results (run_day.py / run_sweep.py)
+results/

@@ -1,0 +1,44 @@
+# =============================================================================
+#  PARAMETER SWEEP - compare many design variants automatically
+# =============================================================================
+#
+#  Run with:   python run_sweep.py --sweep config/sweep_example.yaml
+#
+#  The program takes the base configuration, changes the parameters listed
+#  below, and runs one simulation for EVERY combination of values.
+#  2 parameters with 4 and 3 values -> 4 x 3 = 12 simulations (~3 s each).
+#
+#  Parameter names are the "path" through the sections of the YAML file,
+#  joined with dots. Examples:
+#     fans.count                          number of fans
+#     fans.frame_size_mm                  fan size (generic fan curve only)
+#     fans.speed_rpm                      fan speed (generic fan curve only)
+#     openings.inlet.mesh_open_fraction   insect mesh at the fans
+#     openings.outlet.top_cut_m           size of the gable outlet
+#     openings.outlet.mesh_open_fraction  insect mesh at the outlet
+#     geometry.collector_length_m         length of the black section
+#     construction.insulation_thickness_m floor insulation
+#     cover.ir_transmittance              type of plastic
+#     weather.synthetic.sky_clearness     sunny vs. cloudy day
+#
+#  The plot uses the FIRST parameter as x-axis and draws one line per value
+#  of the SECOND parameter. All numbers are also saved in a CSV file.
+# =============================================================================
+
+base_config: default_dryer.yaml   # relative to this file's folder
+
+name: fan_study                   # results go to results/sweep_fan_study/
+
+parameters:
+  fans.count: [1, 2, 3, 4]
+  fans.frame_size_mm: [80, 92, 120]
+
+# Summary numbers to plot (one figure each). See summary.txt of a normal run
+# for all available names.
+metrics_to_plot:
+  - T_outlet_max_C
+  - T_product_max_C
+  - T_rise_daytime_mean_K
+  - airflow_daytime_mean_m3_h
+  - rh_outlet_daytime_mean_pct
+  - water_capacity_kg_per_day     # how much water the air COULD carry away
