@@ -24,7 +24,7 @@ from solardryer.simulate import format_summary, run_simulation
 
 def main():
     parser = argparse.ArgumentParser(description="Simulate the solar dryer for one day.")
-    parser.add_argument("--config", default="config/default_dryer.yaml",
+    parser.add_argument("--config", default="config/default_dryer_copy.yaml",
                         help="Path to the YAML parameter file")
     args = parser.parse_args()
 
