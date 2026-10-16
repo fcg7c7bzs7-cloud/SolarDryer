@@ -121,3 +121,44 @@ def sweep_plot(df, params, metric, path):
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
+
+
+def sensors_plot(r, cfg, path):
+    """What the sensors show versus the true air at their position.
+    Sensors with identical settings give identical lines (drawn on top of each other)."""
+    names = [s["name"] for s in cfg["sensors"]["list"]]
+    hours = r["hour"]
+    fig, axes = plt.subplots(3, 1, figsize=(10, 10), sharex=True,
+                             gridspec_kw={"height_ratios": [3, 2, 2]})
+    ax_t, ax_rh, ax_e = axes
+    ax_t.plot(hours, r["t_amb_C"], color=GREY, lw=2, label="Outside air")
+    ax_rh.plot(hours, r["rh_amb_pct"], color=GREY, lw=2, label="Outside air")
+    zones = {s["name"]: s["zone"] for s in cfg["sensors"]["list"]}
+    # true air: one dashed line per zone (sensors in the same zone share it)
+    zone_style = {"collector": ("#0b0b0b", (0, (4, 3))), "drying": ("#0b0b0b", (0, (1, 2)))}
+    for z in dict.fromkeys(zones.values()):
+        n = next(k for k, v in zones.items() if v == z)
+        col, ls = zone_style[z]
+        ax_t.plot(hours, r[f"sensor_{n}_air_T_C"], color=col, lw=1.2, ls=ls, label=f"true air, {z} zone")
+        ax_rh.plot(hours, r[f"sensor_{n}_air_RH_pct"], color=col, lw=1.2, ls=ls,
+                   label=f"true air, {z} zone")
+    for i, n in enumerate(names):
+        col = C[i % len(C)]
+        ax_t.plot(hours, r[f"sensor_{n}_T_C"], color=col, lw=2, label=f"{n} ({zones[n]})")
+        ax_rh.plot(hours, r[f"sensor_{n}_RH_pct"], color=col, lw=2, label=f"{n} ({zones[n]})")
+        ax_e.plot(hours, r[f"sensor_{n}_error_K"], color=col, lw=2, label=n)
+    _style(ax_t, "Temperature [°C]")
+    ax_t.legend(loc="upper left", frameon=False, fontsize=8, ncol=2)
+    ax_t.set_title("What the sensors show (coloured) vs. the true air (black, dashed/dotted)",
+                   loc="left", color="#0b0b0b")
+    _style(ax_rh, "Relative humidity [%]")
+    ax_rh.set_ylim(0, 105)
+    ax_rh.legend(loc="lower left", frameon=False, fontsize=8, ncol=2)
+    ax_e.axhline(0, color="#c3c2b7", lw=1)
+    _style(ax_e, "Reading error [K]")
+    ax_e.legend(loc="upper left", frameon=False, fontsize=8)
+    ax_e.set_xlabel("Time [h]", color=INK)
+    ax_e.set_xticks(range(0, int(hours.max()) + 1, 2))
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)

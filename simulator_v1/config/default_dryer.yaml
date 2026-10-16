@@ -359,3 +359,68 @@ evaluation:
                              # seeds/grain for planting ~40-45.
   daytime_start_hour: 8.0    # Daytime window for the averages in the summary.
   daytime_end_hour: 16.0
+
+
+# -----------------------------------------------------------------------------
+# 14. SENSORS - simulate what the DHT21 sensors in the prototype will SHOW
+# -----------------------------------------------------------------------------
+#  A DHT21 (also sold as AM2301) measures the temperature of its own plastic
+#  case, not the air. In the dryer the case is warmed by the sun and by heat
+#  radiation from the hot black floor / product, so it shows a temperature that
+#  is TOO HIGH - and therefore a relative humidity that is TOO LOW.
+#
+#  The model calculates the temperature of each sensor case and writes, for
+#  every sensor, these columns to timeseries.csv:
+#     sensor_<name>_T_C         what the sensor shows
+#     sensor_<name>_air_T_C     the true air temperature at that position
+#     sensor_<name>_error_K     the difference (shown - true)
+#     sensor_<name>_RH_pct      relative humidity the sensor shows
+#     sensor_<name>_air_RH_pct  true relative humidity of the air
+#  and plots them in sensors.png.  Compare sensor_<name>_T_C with your
+#  measurements - NOT the air temperature!
+#
+#  Datasheet accuracy of the DHT21 itself: about +-0.5 degC and +-3 % RH.
+#  The errors caused by heating up are usually much larger than that.
+sensors:
+  enabled: true              # false = do not simulate sensors
+
+  case:                      # Properties of the sensor housing, the same for all sensors.
+    length_mm: 59            # Size of the plastic case [ESTIMATE - measure yours].
+    width_mm: 27
+    thickness_mm: 13.5
+    mass_g: 10               # Mass of the case incl. electronics (without cable) [ESTIMATE].
+    specific_heat_J_kgK: 1400
+                             # Heat capacity of plastic (ABS) ~1400. Mass x this = heat storage.
+                             # (With the defaults the sensor needs ~5 minutes to follow a change.)
+    solar_absorptance: 0.85  # How much sunlight the case absorbs. The wired AM2301/DHT21 usually
+                             # has a BLACK case (~0.85-0.95). A white case would be ~0.3.
+                             # Check the colour of your sensors!
+    thermal_emittance: 0.90  # Plastic radiates heat well (~0.9) whatever its colour.
+    contact_conductance_W_m2K: 15
+                             # Only for sensors lying on a tray: how well heat flows from the
+                             # case into the tray/product it lies on [ESTIMATE].
+
+  # One entry per sensor. Each sensor can override any value of "case" above,
+  # e.g. add  solar_absorptance: 0.3  to a sensor that has a white case.
+  list:
+    - name: S1_collector     # Short name (no spaces) - used in the CSV column names.
+      zone: collector        # "collector" = above the black floor, "drying" = trays.
+      mounting: hanging      # "hanging" = in mid-air (the black floor below it heats it by
+                             #             radiation); "lying" = lying flat on a tray.
+      sun_exposure_factor: 0.4
+                             # How much of one large face of the case is hit by sunlight:
+                             #   1.0 = lying flat in full sun
+                             #   0.3-0.5 = hanging vertically (the high tropical sun hits it
+                             #             mostly from above, on the narrow edge and sides)
+                             #   0.0 = shaded (e.g. under a small white roof / radiation shield)
+                             # [ESTIMATE] - a good value to adjust when comparing to measurements.
+
+    - name: S2_tray          # Lying in the tray in the centre of the dryer.
+      zone: drying
+      mounting: lying
+      sun_exposure_factor: 1.0
+
+    - name: S3_tray          # Second sensor next to S2 (identical by default; change e.g.
+      zone: drying           # sun_exposure_factor if one of them is partly shaded).
+      mounting: lying
+      sun_exposure_factor: 1.0

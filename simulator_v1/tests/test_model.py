@@ -138,3 +138,38 @@ def test_csv_weather_runs(cfg):
 def test_typo_in_parameter_name_is_reported(cfg):
     with pytest.raises(KeyError):
         set_value(cfg, "fans.cuont", 3)
+
+
+# ---------------------------------------------------------------- sensors
+def test_sensors_in_sun_read_too_high(cfg):
+    r, s, _ = run_simulation(cfg)
+    noon = r.iloc[(r["hour"] - 12).abs().idxmin()]
+    for name in ("S1_collector", "S2_tray"):
+        assert noon[f"sensor_{name}_T_C"] > noon[f"sensor_{name}_air_T_C"] + 1
+        # a too-warm sensor shows a too-LOW relative humidity
+        assert noon[f"sensor_{name}_RH_pct"] < noon[f"sensor_{name}_air_RH_pct"]
+
+
+def test_shaded_white_sensor_is_more_accurate(cfg):
+    _, s_sun, _ = run_simulation(cfg)
+    shaded = [dict(x, sun_exposure_factor=0.0, solar_absorptance=0.3)
+              for x in cfg["sensors"]["list"]]
+    c = set_value(cfg, "sensors.list", shaded)
+    _, s_shade, _ = run_simulation(c)
+    for name in ("S1_collector", "S2_tray"):
+        assert (s_shade[f"sensor_{name}_error_daytime_mean_K"]
+                < s_sun[f"sensor_{name}_error_daytime_mean_K"])
+
+
+def test_sensors_without_heating_follow_the_air(cfg):
+    # no sun, no radiation exchange possible to hotter surfaces -> error ~ 0 at night start
+    c = set_value(cfg, "weather.synthetic.sky_clearness", 0.0)
+    c = set_value(c, "cover.ir_transmittance", 0.0)
+    c = set_value(c, "evaporation.daily_water_removal_kg", 0.0)
+    _, s, _ = run_simulation(c)
+    assert abs(s["sensor_S1_collector_error_max_K"]) < 0.5
+
+
+def test_sensors_can_be_switched_off(cfg):
+    r, _, _ = run_simulation(set_value(cfg, "sensors.enabled", False))
+    assert not any(col.startswith("sensor_") for col in r.columns)

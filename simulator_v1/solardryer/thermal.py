@@ -260,6 +260,11 @@ class DryerModel:
             "water_capacity_kg_h": m * (psychro.adiabatic_saturation_w(
                 ta2, w_out, p, cfg["evaporation"]["max_outlet_rh"]) - w_amb) * 3600,
             "q_sun_entering_W": sol["q_in_collector"] + sol["q_in_drying"],
+            "q_in_collector_W": sol["q_in_collector"],   # sunlight landing inside zone 1
+            "q_in_drying_W": sol["q_in_drying"],         # sunlight landing inside zone 2
+            "w_amb": w_amb,                              # humidity ratio outside [kg/kg]
+            "w_outlet": w_out,                           # humidity ratio in zone 2 [kg/kg]
+            "air_velocity_m_s": v_in,                    # mean air speed inside the box
             "q_sun_absorbed_W": q_sun,
             "q_useful_air_W": q_useful,
             "q_evaporation_W": q_evap,

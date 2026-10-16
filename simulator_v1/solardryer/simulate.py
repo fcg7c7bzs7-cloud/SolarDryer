@@ -14,7 +14,7 @@ airflow, humidity, heat flows). 'summary' is a dictionary with the key numbers
 
 import numpy as np
 
-from . import geometry, thermal, weather
+from . import geometry, sensors, thermal, weather
 
 
 def evaporation_targets(cfg, wx, dt):
@@ -52,12 +52,19 @@ def run_simulation(cfg, verbose=False):
     t0 = float(wx["t_amb"].iloc[0])
     state = {"T_plate": t0, "T_prod": t0, "T_air1": t0, "T_air2": t0}
 
+    # Virtual temperature/humidity sensors (see sensors.py and the YAML section "sensors")
+    sensor_model = sensors.SensorModel(cfg, geom, model.p)
+    sensor_temps = sensor_model.initial_state(t0)
+
     rows = []
     for i in range(n_steps + 1):
         w = wx.iloc[i]
         wxd = {"ghi": float(w["ghi"]), "dhi": float(w["dhi"]), "t_amb": float(w["t_amb"]),
                "rh_amb": float(w["rh_amb"]), "wind": float(w["wind"])}
         state, out = model.step(state, wxd, float(w["hour"]), dt, float(evap[i]))
+        if sensor_model.enabled:
+            sensor_temps, sensor_out = sensor_model.step(sensor_temps, out, dt)
+            out.update(sensor_out)
         rows.append(out)
         if verbose and i % int(3600 / dt) == 0:
             print(f"  {out['hour']:5.1f} h  T_out = {out['T_air_outlet_C']:5.1f} degC")
@@ -98,6 +105,14 @@ def summarize(cfg, r, dt):
         "fan_energy_Wh_per_day": fan_on_h * cfg["fans"]["count"] * cfg["fans"]["electric_power_W"] / days,
         "energy_balance_error_pct": 100 * abs(r["energy_residual_W"].sum() * dt) / max(sun_absorbed, 1.0),
     }
+    # Sensors: largest and daytime-average reading error (shown minus true air temperature)
+    for col in [c for c in r.columns if c.startswith("sensor_") and c.endswith("_error_K")]:
+        name = col[len("sensor_"):-len("_error_K")]
+        s[f"sensor_{name}_error_max_K"] = r[col].max()
+        s[f"sensor_{name}_error_daytime_mean_K"] = r.loc[day, col].mean()
+        s[f"sensor_{name}_RH_error_daytime_mean_pct"] = (
+            r.loc[day, f"sensor_{name}_RH_pct"] - r.loc[day, f"sensor_{name}_air_RH_pct"]).mean()
+
     from .geometry import build_geometry
     vol = build_geometry(cfg).volume
     s["air_changes_per_hour_daytime"] = s["airflow_daytime_mean_m3_h"] / vol
@@ -107,5 +122,5 @@ def summarize(cfg, r, dt):
 def format_summary(summary):
     lines = ["Summary", "-------"]
     for k, v in summary.items():
-        lines.append(f"  {k:<40}{v:10.2f}")
+        lines.append(f"  {k:<50}{v:10.2f}")
     return "\n".join(lines)

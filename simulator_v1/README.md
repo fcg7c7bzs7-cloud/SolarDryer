@@ -35,6 +35,7 @@ This uses `config/default_dryer.yaml` and writes to `results/default_dryer/`:
 | `timeseries.csv` | every quantity at every time step; open it in Excel |
 | `day_overview.png` | temperatures, humidity, sunlight and airflow over the day |
 | `energy_split.png` | where the absorbed solar energy goes |
+| `sensors.png` | what the DHT21 sensors would show vs. the true air (see 5.4) |
 
 **Try your own design:** copy the YAML file, change some values and change
 `run: name:` so you don't overwrite the old results. Then run:
@@ -133,7 +134,37 @@ can see which element limits the airflow.
   uninsulated floor**. Try `construction.insulation_thickness_m: 0.03` and
   `cover.ir_transmittance`.
 
-### 5.4 Limits of this version (be careful with conclusions)
+### 5.4 Virtual sensors (DHT21) - comparing with measurements
+
+The prototype has three DHT21 (AM2301) temperature/humidity sensors: **S1** hangs
+in mid-air above the black floor, and **S2** and **S3** lie side by side on the tray
+in the centre of the dryer. A DHT21 measures the temperature of **its own case**.
+In the dryer that case is heated by the sun and by heat radiation from the hot
+black floor or product, so it shows a temperature that is **too high**, and
+therefore a relative humidity that is **too low**.
+
+`solardryer/sensors.py` simulates each sensor case as a small object with its
+own temperature. The case gains heat from sunlight and from radiation from the
+surfaces below it (black floor or product), and through contact with the tray.
+It loses heat to the air by convection and by radiation through the cover to
+the sky. The sensors are set up in section 14 of the YAML file: position (zone),
+mounting (hanging or lying), case size and colour, and how much sun reaches
+them (`sun_exposure_factor`).
+
+With the default settings (black case, unshielded), on a sunny day the model
+expects the sensors to read about **10–12 K too high** around noon, and the
+humidity to read about **20 % RH too low**. At night they read 1–2 K too low,
+because they radiate heat to the cold sky.
+
+**How to use it with real data:** compare the measurements with the
+`sensor_<name>_T_C` / `sensor_<name>_RH_pct` columns, *not* with the air
+temperature. If the shape matches but the level doesn't, adjust the
+`[ESTIMATE]` values (sun exposure, absorptance, contact conductance). For
+measurements that show the true air temperature, put the sensors in shade, for
+example under a small white "roof" or inside a white tube that air can flow
+through. Set `sun_exposure_factor: 0` to see how much that would help.
+
+### 5.5 Limits of this version (be careful with conclusions)
 
 - **Treat the results as comparisons between designs, not exact
   predictions.** Several inputs marked `[ESTIMATE]` in the YAML (plastic
@@ -151,7 +182,7 @@ can see which element limits the airflow.
 - The sun model uses a clear-sky shape scaled by `sky_clearness`. For real
   clouds, use measured data (`weather.source: csv`).
 
-### 5.5 Files
+### 5.6 Files
 
 ```
 simulator_v1/
@@ -163,11 +194,11 @@ simulator_v1/
   solardryer/                 the model (each file starts with an explanation)
     config.py   geometry.py   weather.py   solar.py
     airflow.py  psychro.py    thermal.py   simulate.py
-    plots.py    sweep.py
+    plots.py    sweep.py      sensors.py
   tests/test_model.py         automatic checks
 ```
 
-### 5.6 Main references
+### 5.7 Main references
 
 - Duffie & Beckman, *Solar Engineering of Thermal Processes* (sun position, isotropic
   sky model, incidence angle, sky temperature).
