@@ -14,7 +14,7 @@ airflow, humidity, heat flows). 'summary' is a dictionary with the key numbers
 
 import numpy as np
 
-from . import geometry, sensors, thermal, weather
+from . import control, geometry, sensors, thermal, weather
 
 
 def evaporation_targets(cfg, wx, dt):
@@ -56,15 +56,31 @@ def run_simulation(cfg, verbose=False):
     sensor_model = sensors.SensorModel(cfg, geom, model.p)
     sensor_temps = sensor_model.initial_state(t0)
 
+    # Fan control (full speed / sun / fixed PWM / PID), see control.py
+    controller = control.FanController(cfg)
+    pid_cfg = (cfg["fans"].get("control") or {}).get("pid") or {}
+
     rows = []
     for i in range(n_steps + 1):
         w = wx.iloc[i]
         wxd = {"ghi": float(w["ghi"]), "dhi": float(w["dhi"]), "t_amb": float(w["t_amb"]),
                "rh_amb": float(w["rh_amb"]), "wind": float(w["wind"])}
-        state, out = model.step(state, wxd, float(w["hour"]), dt, float(evap[i]))
+        ctrl = controller.advance(float(w["hour"]), dt, wxd["ghi"])
+        state, out = model.step(state, wxd, float(w["hour"]), dt, float(evap[i]),
+                                speed=ctrl["speed"])
         if sensor_model.enabled:
             sensor_temps, sensor_out = sensor_model.step(sensor_temps, out, dt)
             out.update(sensor_out)
+        out["fan_pwm"] = ctrl["pwm"]
+        # electrical power rises with about speed^3 (fan laws)
+        out["fan_power_W"] = (cfg["fans"]["count"] * cfg["fans"]["electric_power_W"]
+                              * ctrl["speed"] ** 3)
+        if controller.mode == "pid":
+            out["control_input_C"] = ctrl["input"]
+            out["control_setpoint_C"] = pid_cfg["setpoint_C"]
+            out["pid_output"] = ctrl["pid_output"]
+            out["pid_integral"] = ctrl["pid_integral"]
+            controller.remember(controller.measured_input(out, sensor_model.enabled))
         rows.append(out)
         if verbose and i % int(3600 / dt) == 0:
             print(f"  {out['hour']:5.1f} h  T_out = {out['T_air_outlet_C']:5.1f} degC")
@@ -82,7 +98,6 @@ def summarize(cfg, r, dt):
     day = (hod >= ev["daytime_start_hour"]) & (hod <= ev["daytime_end_hour"])
     days = cfg["run"]["days"]
     limit = ev["product_max_temperature_C"]
-    fan_on_h = (r["fan_speed_fraction"] > 0).sum() * dt / 3600
 
     sun_absorbed = r["q_sun_absorbed_W"].sum() * dt
     s = {
@@ -102,9 +117,18 @@ def summarize(cfg, r, dt):
         "water_capacity_kg_per_day": r["water_capacity_kg_h"].sum() * dt / 3600 / days,
         "sun_energy_absorbed_kWh_per_day": sun_absorbed / 3.6e6 / days,
         "useful_heat_to_air_kWh_per_day": r["q_useful_air_W"].clip(lower=0).sum() * dt / 3.6e6 / days,
-        "fan_energy_Wh_per_day": fan_on_h * cfg["fans"]["count"] * cfg["fans"]["electric_power_W"] / days,
+        "fan_energy_Wh_per_day": r["fan_power_W"].sum() * dt / 3600 / days,
+        "fan_speed_daytime_mean_pct": 100 * r.loc[day, "fan_speed_fraction"].mean(),
         "energy_balance_error_pct": 100 * abs(r["energy_residual_W"].sum() * dt) / max(sun_absorbed, 1.0),
     }
+    # Temperature control (PID mode only)
+    if "control_input_C" in r.columns:
+        dev = (r.loc[day, "control_input_C"] - r.loc[day, "control_setpoint_C"])
+        s["control_input_daytime_mean_C"] = r.loc[day, "control_input_C"].mean()
+        s["control_input_max_C"] = r["control_input_C"].max()
+        s["control_within_2K_daytime_pct"] = 100 * (dev.abs() <= 2).mean()
+        s["control_pwm_daytime_mean"] = r.loc[day, "fan_pwm"].mean()
+
     # Sensors: largest and daytime-average reading error (shown minus true air temperature)
     for col in [c for c in r.columns if c.startswith("sensor_") and c.endswith("_error_K")]:
         name = col[len("sensor_"):-len("_error_K")]

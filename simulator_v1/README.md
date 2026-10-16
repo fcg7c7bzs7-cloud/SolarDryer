@@ -164,7 +164,54 @@ measurements that show the true air temperature, put the sensors in shade, for
 example under a small white "roof" or inside a white tube that air can flow
 through. Set `sun_exposure_factor: 0` to see how much that would help.
 
-### 5.5 Limits of this version (be careful with conclusions)
+### 5.5 Fan control: full speed, sun, fixed PWM or PID
+
+Set the fan control in the YAML file under `fans: control: mode:`.
+
+| mode | What it simulates |
+|---|---|
+| `full` | full speed (PWM 255) between `on_hour` and `off_hour`. This was the behaviour before |
+| `sun` | fans powered directly by a small solar panel: speed follows the sunshine |
+| `fixed_pwm` | the Arduino writes a constant PWM value (`fixed_pwm`) |
+| `pid` | the Arduino controls the temperature with a PID that writes a PWM value of 0–255 |
+
+**PID.** `solardryer/control.py` contains an exact Python copy of the Arduino
+library **PID_v1_bc** (David Forrest), including the sample-time scaling of Ki/Kd,
+REVERSE/DIRECT, P_ON_E/P_ON_M, the output limits and the back-calculation
+anti-windup. This means the Kp, Ki, Kd, setpoint, sample time and output limits
+from the prototype sketch can be copied into `fans: control: pid:` unchanged.
+The controller reads the **maximum of the three simulated DHT21 readings**,
+just like the prototype. These readings include the case heating (see 5.4) and
+are rounded to 0.1 °C and refreshed every 2 s. You can also select true
+temperatures instead (`air_outlet`, `product`, ...).
+
+**PWM → fan speed (2-pin fans).** The PWM output switches the fan's 12 V on and
+off, so the fan sees an average voltage. Below `pwm: stop_below` the fan stands
+still, and a standing fan only starts again from `pwm: start_at` upwards. In
+between, the speed rises linearly to 100 % at PWM 255, or follows your own
+measured `pwm: curve`. Airflow and pressure follow the fan laws. Electrical
+power drops with about speed³, so `fan_energy_Wh_per_day` now reflects the real
+speed.
+
+**Timing.** The Arduino computes the PID every 100 ms (or every
+`loop_period_ms`, if `loop()` is slower, e.g. because it waits for the DHT21).
+The simulation runs the PID with that clock inside each simulation step. The
+controller sees the dryer with a delay of one step (`time_step_s`), so keep the
+step at 30 s or less for control studies.
+
+**Outputs.** `results/<name>/control.png` shows the controller input, setpoint,
+PWM and airflow. The CSV has `fan_pwm`, `fan_speed_fraction`, `control_input_C`,
+`pid_output` and `pid_integral`, and the summary has `control_within_2K_daytime_pct`
+and `control_pwm_daytime_mean`. To compare all modes, run
+`python run_sweep.py --sweep config/sweep_control_modes.yaml`.
+
+**Watch out:** the sensors read 10 K or more above the true air temperature in
+the sun. A controller that uses them therefore runs the fans harder than the
+true air temperature requires. With the default settings it reaches full speed
+around noon without the reading ever getting down to the setpoint. Shaded
+control sensors would change this.
+
+### 5.6 Limits of this version (be careful with conclusions)
 
 - **Treat the results as comparisons between designs, not exact
   predictions.** Several inputs marked `[ESTIMATE]` in the YAML (plastic
@@ -182,23 +229,24 @@ through. Set `sun_exposure_factor: 0` to see how much that would help.
 - The sun model uses a clear-sky shape scaled by `sky_clearness`. For real
   clouds, use measured data (`weather.source: csv`).
 
-### 5.6 Files
+### 5.7 Files
 
 ```
 simulator_v1/
   config/default_dryer.yaml   all parameters (start here!)
   config/sweep_example.yaml   example parameter study
+  config/sweep_control_modes.yaml  compare full / sun / fixed PWM / PID
   data/example_weather.csv    example measured-weather format (with two cloud periods)
   run_day.py                  simulate one day
   run_sweep.py                run a parameter study
   solardryer/                 the model (each file starts with an explanation)
     config.py   geometry.py   weather.py   solar.py
     airflow.py  psychro.py    thermal.py   simulate.py
-    plots.py    sweep.py      sensors.py
+    plots.py    sweep.py      sensors.py    control.py
   tests/test_model.py         automatic checks
 ```
 
-### 5.7 Main references
+### 5.8 Main references
 
 - Duffie & Beckman, *Solar Engineering of Thermal Processes* (sun position, isotropic
   sky model, incidence angle, sky temperature).

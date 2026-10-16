@@ -153,7 +153,7 @@ def fan_speed_fraction(cfg, hour, ghi):
     h = hour % 24.0
     if not (f["on_hour"] <= h < f["off_hour"]):
         return 0.0
-    if not f["speed_follows_sun"]:
+    if not f.get("speed_follows_sun", False):
         return 1.0
     s = min(1.0, ghi / f["sun_for_full_speed_W_m2"])
     return s if s >= f["min_speed_fraction"] else 0.0

@@ -12,6 +12,7 @@ What you get in results/<run name>/:
     day_overview.png   temperatures, humidity, sunlight, airflow over time
     energy_split.png   where the solar energy goes
     sensors.png        what the virtual DHT21 sensors show vs. the true air
+    control.png        PID mode only: controller input, setpoint, PWM, airflow
 """
 
 import argparse
@@ -46,6 +47,8 @@ def main():
     plots.day_overview(results, cfg, os.path.join(out_dir, "day_overview.png"))
     if (cfg.get("sensors") or {}).get("enabled"):
         plots.sensors_plot(results, cfg, os.path.join(out_dir, "sensors.png"))
+    if "control_input_C" in results.columns:
+        plots.control_plot(results, cfg, os.path.join(out_dir, "control.png"))
 
     dt = cfg["run"]["time_step_s"]
     days = cfg["run"]["days"]

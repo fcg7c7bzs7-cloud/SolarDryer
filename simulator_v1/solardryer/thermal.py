@@ -120,13 +120,15 @@ class DryerModel:
         }
 
     # ------------------------------------------------------------------
-    def step(self, state, wx, hour, dt, evap_target):
+    def step(self, state, wx, hour, dt, evap_target, speed=None):
         """
         Advance the model by one time step.
 
         state : dict with T_plate, T_prod, T_air1, T_air2 (degC) at the old time
         wx    : weather at the new time (dict: ghi, dhi, t_amb, rh_amb, wind)
         evap_target : desired evaporation rate [kg/s]
+        speed : fan speed fraction 0..1 for this step (from control.py). If None,
+                the simple schedule is used (full speed or following the sun).
 
         Returns (new_state, out) where out holds every quantity for the results table.
         """
@@ -145,7 +147,8 @@ class DryerModel:
         eps_t = cfg["trays"]["thermal_emittance"]
 
         sol = self.solar_gains(hour, wx["ghi"], wx["dhi"])
-        speed = airflow.fan_speed_fraction(cfg, hour, wx["ghi"])
+        if speed is None:
+            speed = airflow.fan_speed_fraction(cfg, hour, wx["ghi"])
 
         tp, tt = state["T_plate"], state["T_prod"]
         ta1, ta2 = state["T_air1"], state["T_air2"]

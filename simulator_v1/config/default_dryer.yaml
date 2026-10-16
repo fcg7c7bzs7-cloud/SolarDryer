@@ -321,16 +321,73 @@ fans:
   # When do the fans run?
   on_hour: 6.0               # Fans switch on at 06:00 ...
   off_hour: 18.0             # ... and off at 18:00. Use 0 and 24 for "always on".
-  speed_follows_sun: false   # true = fans are powered directly by a small solar panel, so
-                             #        their speed follows the sunshine (full speed at
-                             #        sun_for_full_speed_W_m2 and above).
-                             # false = constant full speed between on_hour and off_hour.
+                             # (The fan speed is set in "control" below.)
+
+  # ---------------------------------------------------------------------------
+  # FAN CONTROL - how fast the fans run between on_hour and off_hour
+  # ---------------------------------------------------------------------------
+  control:
+    mode: full               # "full"      = full speed (PWM 255) all the time
+                             # "sun"       = fans powered directly by a small solar panel:
+                             #               speed follows the sunshine (full speed at
+                             #               sun_for_full_speed_W_m2 and above, see below)
+                             # "fixed_pwm" = the Arduino writes a constant PWM value (fixed_pwm)
+                             # "pid"       = temperature control with the Arduino PID (see pid)
+    fixed_pwm: 180           # Only for mode fixed_pwm: PWM value 0..255.
+
+    # Which temperature the controller reads. Names from section 14 (sensors) use
+    # the SIMULATED SENSOR READING (incl. the case heating!), like the real Arduino.
+    # You can also use the true values: air_outlet, air_collector, product, plate.
+    input:
+      sources: [S1_collector, S2_tray, S3_tray]
+      combine: max           # "max" = the prototype uses the highest of the readings;
+                             # "mean" or "min" are also possible.
+      resolution_C: 0.1      # The DHT21 gives temperatures in steps of 0.1 degC.
+      read_interval_s: 2     # How often new sensor values are read. The DHT21 cannot be read
+                             # faster than every 2 s. Between readings the old value is used.
+
+    # PID controller - an exact copy of the Arduino library PID_v1_bc (David Forrest).
+    # Copy the values from your Arduino sketch:
+    #     PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, P_ON_E, REVERSE);
+    #     myPID.SetSampleTime(...);  myPID.SetOutputLimits(min, max);
+    # The PID output is the PWM value 0..255 that analogWrite() sends to the fans.
+    pid:
+      setpoint_C: 45.0       # Target temperature (of the controller input above).
+      Kp: 20.0               # [ESTIMATE - use your prototype values] PWM per K of error.
+      Ki: 0.05               # [ESTIMATE] PWM per (K x second). Arduino units: per SECOND.
+      Kd: 0.0                # [ESTIMATE] PWM per (K / second).
+      direction: reverse     # "reverse" = more output when the temperature is ABOVE the
+                             #   setpoint. This is right for cooling with fans (REVERSE in
+                             #   the Arduino sketch). "direct" = the opposite (heaters).
+      proportional_on: error # "error" (P_ON_E, the default) or "measurement" (P_ON_M).
+      sample_time_ms: 100    # SetSampleTime(); the library default is 100 ms. Ki and Kd are
+                             # scaled with it exactly like in the library.
+      loop_period_ms: 100    # How long one pass of loop() really takes on the Arduino. If the
+                             # sketch waits for the DHT21 (e.g. delay(2000)), Compute() runs
+                             # less often than sample_time_ms - enter that time here.
+      output_min: 0          # SetOutputLimits(min, max). E.g. a minimum of 80 keeps the fans
+      output_max: 255        # always turning (some air exchange even when it is too cold).
+
+  # How the PWM value becomes fan speed. The 2-pin fans are switched on/off very fast
+  # by the PWM output, so they see an average voltage. A fan cannot turn very slowly:
+  pwm:
+    max_value: 255           # PWM range of analogWrite() (8 bit).
+    stop_below: 60           # [ESTIMATE - measure] below this PWM value the fan stands still.
+    start_at: 90             # [ESTIMATE - measure] a standing fan needs at least this to start.
+    speed_at_stop_below: 0.30
+                             # Speed (fraction of full speed) at the lowest running PWM value.
+                             # Above it the speed rises in a straight line to 1.0 at 255.
+    curve: []                # Optional: your own measurements as [PWM, speed fraction] pairs,
+                             # e.g. [[60, 0.3], [128, 0.6], [255, 1.0]]. Replaces the line above.
+
+  # Settings for mode "sun":
   sun_for_full_speed_W_m2: 700
-  min_speed_fraction: 0.3    # Below this fraction of full speed a PC fan stalls (stops).
+  min_speed_fraction: 0.3    # Mode "sun": below this fraction of full speed the fan stalls.
   stopped_fan_loss_coefficient: 4.0
                              # When a fan stands still, air can still pass through it, but
                              # with a high loss (K value). [ESTIMATE]
-  electric_power_W: 2.0      # Electrical power of ONE fan (for the summary only).
+  electric_power_W: 2.0      # Electrical power of ONE fan at full speed (summary only;
+                             # at lower speed the power drops with about speed^3).
 
 
 # -----------------------------------------------------------------------------

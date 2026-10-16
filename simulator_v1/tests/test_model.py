@@ -173,3 +173,77 @@ def test_sensors_without_heating_follow_the_air(cfg):
 def test_sensors_can_be_switched_off(cfg):
     r, _, _ = run_simulation(set_value(cfg, "sensors.enabled", False))
     assert not any(col.startswith("sensor_") for col in r.columns)
+
+
+# ---------------------------------------------------------------- fan control
+from solardryer.control import AUTOMATIC, FanDriver, PIDv1bc  # noqa: E402
+
+
+def test_pid_matches_arduino_library_by_hand():
+    # Kp=2, Ki=1/s, Kd=0.5 s, SampleTime 1000 ms, DIRECT, P_ON_E
+    pid = PIDv1bc(2, 1, 0.5, True, False, 1000, 0, 255)
+    pid.set_mode(AUTOMATIC, 10.0)                 # Initialize(): outputSum=0, lastInput=10
+    assert pid.compute(10.0, 12.0) == pytest.approx(2 * 2 + 1 * 2)                 # 6.0
+    assert pid.compute(11.0, 12.0) == pytest.approx(2 * 1 + 3 - 0.5 * 1)           # 4.5
+
+
+def test_pid_back_calculation_anti_windup():
+    pid = PIDv1bc(100, 1, 0, True, False, 1000, 0, 255)
+    pid.set_mode(AUTOMATIC, 0.0)
+    assert pid.compute(0.0, 5.0) == 255
+    # PID_v1_bc pulls the integral back so that P + I = limit
+    assert pid.output_sum == pytest.approx(255 - 500)
+
+
+def test_pid_reverse_more_fan_when_hotter():
+    pid = PIDv1bc(20, 0.05, 0, True, True, 100, 0, 255)
+    pid.set_mode(AUTOMATIC, 50.0)
+    assert pid.compute(50.0, 45.0) > 0      # too hot -> fans on
+    pid2 = PIDv1bc(20, 0.05, 0, True, True, 100, 0, 255)
+    pid2.set_mode(AUTOMATIC, 40.0)
+    assert pid2.compute(40.0, 45.0) == 0    # too cold -> fans off
+
+
+def test_two_pin_fan_start_stop_hysteresis():
+    d = FanDriver({"max_value": 255, "stop_below": 60, "start_at": 90,
+                   "speed_at_stop_below": 0.3, "curve": []})
+    assert d.speed(70) == 0.0               # standing fan does not start at 70
+    assert d.speed(95) > 0.3                # starts at >= 90
+    assert d.speed(70) > 0.3                # keeps turning down to 60
+    assert d.speed(59) == 0.0               # stops below 60
+    assert d.speed(255) == pytest.approx(1.0)
+
+
+def test_full_mode_equals_old_behaviour(cfg):
+    _, s_new, _ = run_simulation(set_value(cfg, "fans.control.mode", "full"))
+    old = set_value(cfg, "fans.control", None)
+    del old["fans"]["control"]               # old config file without a control section
+    _, s_old, _ = run_simulation(old)
+    assert s_new["T_outlet_max_C"] == pytest.approx(s_old["T_outlet_max_C"])
+
+
+def test_pid_holds_true_outlet_temperature(cfg):
+    c = set_value(cfg, "fans.control.mode", "pid")
+    c = set_value(c, "fans.control.input.sources", ["air_outlet"])
+    c = set_value(c, "fans.control.pid.setpoint_C", 58.0)
+    r, s, _ = run_simulation(c)
+    # around noon the sun is strong enough: the controller should hold the setpoint
+    noon = r[(r["hour"] >= 11) & (r["hour"] <= 14)]
+    assert (noon["control_input_C"] - 58.0).abs().max() < 2.0
+    assert 0 < noon["fan_pwm"].mean() < 255
+
+
+def test_pid_with_low_setpoint_runs_fans_flat_out(cfg):
+    c = set_value(cfg, "fans.control.mode", "pid")
+    c = set_value(c, "fans.control.pid.setpoint_C", 0.0)
+    r, _, _ = run_simulation(c)
+    on = r[(r["hour"] >= 7) & (r["hour"] < 18)]
+    assert (on["fan_pwm"] == 255).all()
+
+
+def test_pid_with_high_setpoint_keeps_fans_off(cfg):
+    c = set_value(cfg, "fans.control.mode", "pid")
+    c = set_value(c, "fans.control.pid.setpoint_C", 99.0)
+    r, s, _ = run_simulation(c)
+    assert r["fan_pwm"].max() == 0
+    assert s["fan_energy_Wh_per_day"] == 0

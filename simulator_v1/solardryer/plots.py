@@ -162,3 +162,37 @@ def sensors_plot(r, cfg, path):
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
+
+
+def control_plot(r, cfg, path):
+    """PID mode: controller input vs setpoint, PWM output and resulting airflow."""
+    hours = r["hour"]
+    fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True,
+                             gridspec_kw={"height_ratios": [3, 2, 2]})
+    ax = axes[0]
+    ax.plot(hours, r["t_amb_C"], color=GREY, lw=2, label="Outside air")
+    ax.plot(hours, r["T_air_outlet_C"], color=C[1], lw=2, label="True air at outlet")
+    ax.plot(hours, r["control_input_C"], color=C[0], lw=2, label="Controller input (what the Arduino reads)")
+    ax.plot(hours, r["control_setpoint_C"], color="#0b0b0b", lw=1.2, ls="--", label="Setpoint")
+    _style(ax, "Temperature [°C]")
+    ax.legend(loc="upper left", frameon=False, fontsize=9)
+    p = cfg["fans"]["control"]["pid"]
+    ax.set_title(f"PID fan control (Kp={p['Kp']}, Ki={p['Ki']}, Kd={p['Kd']}, {p['direction']})",
+                 loc="left", color="#0b0b0b")
+
+    ax = axes[1]
+    ax.plot(hours, r["fan_pwm"], color=C[0], lw=2, label="PWM output")
+    _style(ax, "PWM [0-255]")
+    ax.set_ylim(-5, 265)
+    ax.legend(loc="upper left", frameon=False, fontsize=9)
+
+    ax = axes[2]
+    ax.plot(hours, r["airflow_m3_h"], color=C[2], lw=2, label="Airflow")
+    _style(ax, "Airflow [m³/h]")
+    ax.set_ylim(bottom=0)
+    ax.legend(loc="upper left", frameon=False, fontsize=9)
+    ax.set_xlabel("Time [h]", color=INK)
+    ax.set_xticks(range(0, int(hours.max()) + 1, 2))
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)

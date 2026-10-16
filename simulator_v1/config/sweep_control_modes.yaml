@@ -1,0 +1,30 @@
+# =============================================================================
+#  PARAMETER SWEEP - compare the fan control modes
+# =============================================================================
+#
+#  Run with:   python run_sweep.py --sweep config/sweep_control_modes.yaml
+#
+#  Runs the prototype configuration with each fan control mode:
+#    full = always full speed, sun = solar panel powered, fixed_pwm = constant
+#    PWM value, pid = Arduino PID temperature control.
+#
+#  To tune the PID instead, replace the parameters below, e.g.:
+#     fans.control.mode: [pid]
+#     fans.control.pid.Kp: [5, 10, 20, 40]
+#     fans.control.pid.setpoint_C: [45, 50]
+# =============================================================================
+
+base_config: default_dryer_copy.yaml   # the prototype (relative to this file's folder)
+
+name: control_modes                    # results go to results/sweep_control_modes/
+
+parameters:
+  fans.control.mode: [full, sun, fixed_pwm, pid]
+
+metrics_to_plot:
+  - T_outlet_max_C
+  - T_product_max_C
+  - T_rise_daytime_mean_K
+  - airflow_daytime_mean_m3_h
+  - water_capacity_kg_per_day
+  - fan_energy_Wh_per_day
