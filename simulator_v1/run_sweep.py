@@ -20,7 +20,7 @@ from solardryer.sweep import run_sweep
 
 def main():
     parser = argparse.ArgumentParser(description="Run a parameter sweep.")
-    parser.add_argument("--sweep", default="config/sweep_example.yaml")
+    parser.add_argument("--sweep", default="config/sweep_example_copy.yaml")
     args = parser.parse_args()
 
     with open(args.sweep, "r", encoding="utf-8") as f:
