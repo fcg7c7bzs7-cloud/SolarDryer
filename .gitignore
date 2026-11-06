@@ -221,3 +221,6 @@ __marimo__/
 
 # Solar dryer simulator: generated results (run_day.py / run_sweep.py)
 results/
+
+# Google Drive / Windows folder settings
+desktop.ini

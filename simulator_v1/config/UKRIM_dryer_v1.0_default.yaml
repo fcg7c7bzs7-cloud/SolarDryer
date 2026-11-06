@@ -1,0 +1,506 @@
+# =============================================================================
+#  SOLAR DRYER SIMULATOR - MAIN CONFIGURATION FILE
+#  UKRIM DRYER v1.0 - REFERENCE CONFIGURATION ("as built")
+# =============================================================================
+#
+#  This file describes the UKRIM dryer v1.0 prototype as it was built. It is the
+#  REFERENCE for validating the model against measurement data:
+#    - Do NOT change it to try out design ideas - copy it for that.
+#    - Change it only when the real dryer changes, or when a value has been
+#      measured / calibrated. Then note the date and the source in the comment
+#      next to the value, so everybody can see what is measured and what is not.
+#  Created 2026-11-06 from default_dryer_copy.yaml (prototype sizes); fans set to
+#  common 120 mm 12 V 2-pin computer fans.
+#
+#  Run it with:   python run_day.py --config config/UKRIM_dryer_v1.0_default.yaml
+#
+#  This file contains EVERY number the model uses. You should never need to
+#  change the Python code to try a new design - change the values here instead.
+#
+#  How to read this file (YAML format):
+#    - Everything after a "#" is a comment and is ignored by the program.
+#    - "key: value" sets a parameter. Indentation (2 spaces) groups parameters
+#      into sections. Do NOT use tabs, and keep the indentation exactly as it is.
+#    - Numbers use a dot as decimal separator (0.15, not 0,15).
+#    - Text values may be written with or without quotes.
+#
+#  Units: the unit of every parameter is part of its name or written in the
+#  comment next to it.  m = metre, m2 = square metre, m3 = cubic metre,
+#  s = second, h = hour, W = watt, J = joule, K = kelvin (a temperature
+#  DIFFERENCE of 1 K is the same as 1 degC), Pa = pascal (pressure),
+#  kg = kilogram, deg = degree (angle).
+#
+#  Tip: before changing something, copy this file (e.g. to my_design.yaml) and
+#  run the simulation with:   python run_day.py --config config/my_design.yaml
+#
+#  Values marked  [ESTIMATE]  are typical textbook values and should be
+#  replaced by measured values from the real prototype when available.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1. RUN SETTINGS - what to simulate and where to save results
+# -----------------------------------------------------------------------------
+run:
+  name: UKRIM_dryer_v1.0_default  # Name of this run. Results go to results/<name>/
+  days: 1                    # Number of days to simulate (starts at 00:00 local time
+                             # on the date given below). With synthetic weather each
+                             # day is identical.
+  time_step_s: 30            # Time step of the calculation in seconds. Smaller is more
+                             # accurate but slower. 30 s is plenty; do not go above 120 s.
+  output_dir: results        # Folder (relative to simulator_v1) for all output files.
+
+
+# -----------------------------------------------------------------------------
+# 2. LOCATION AND DATE - needed to calculate where the sun is
+# -----------------------------------------------------------------------------
+location:
+  latitude_deg: -7.8         # Latitude in degrees. NEGATIVE = south of the equator.
+                             # -7.8 is Yogyakarta (Java). Change to your test site.
+  longitude_deg: 110.4       # Longitude in degrees. POSITIVE = east of Greenwich.
+  utc_offset_h: 7            # Time zone: WIB (western Indonesia) = 7, WITA = 8, WIT = 9.
+  altitude_m: 100            # Height above sea level. Only used for the air pressure.
+  date: "2026-08-15"         # Start date (YYYY-MM-DD). Determines the sun path.
+                             # The dry season (June-September) is the main drying season.
+
+
+# -----------------------------------------------------------------------------
+# 3. WEATHER - the outside conditions
+# -----------------------------------------------------------------------------
+weather:
+  source: synthetic          # "synthetic" = the program generates a typical day from the
+                             #               simple numbers below.
+                             # "csv"       = read measured data from a file (see csv_file).
+
+  csv_file: data/example_weather.csv
+                             # Only used when source = csv. The file needs these columns:
+                             #   hour          local time in decimal hours (13.5 = 13:30;
+                             #                 use 24, 25, ... for the following day)
+                             #   ghi_W_m2      global horizontal irradiance (sun on a flat
+                             #                 surface; this is what a pyranometer measures)
+                             #   t_amb_C       outside air temperature
+                             #   rh_percent    outside relative humidity (0-100)
+                             #   wind_m_s      wind speed
+                             #   dhi_W_m2      OPTIONAL: diffuse irradiance. If missing it is
+                             #                 estimated from ghi_W_m2.
+
+  synthetic:                 # Only used when source = synthetic.
+    sky_clearness: 0.80      # Fraction of the perfectly-clear-sky sunlight that reaches the
+                             # ground. 1.0 = crystal clear, 0.8 = typical sunny-but-hazy
+                             # tropical day, 0.5 = thin clouds, 0.25 = overcast.
+    t_min_C: 23.0            # Lowest air temperature of the day (around sunrise).
+    t_max_C: 32.0            # Highest air temperature of the day (early afternoon).
+    hour_t_min: 6.0          # Time of the lowest temperature (decimal hours).
+    hour_t_max: 14.0         # Time of the highest temperature.
+    dew_point_C: 22.0        # Dew point of the outside air. It sets the humidity: with
+                             # 22 degC dew point the RH is ~95 % at dawn and ~55 % at 14:00.
+    wind_speed_m_s: 1.5      # Constant wind speed. More wind = more heat loss.
+
+  ground_reflectance: 0.20   # Fraction of sunlight reflected by the ground ("albedo").
+                             # Grass/soil ~0.2, dry sand ~0.3, concrete ~0.3, white gravel ~0.5.
+
+
+# -----------------------------------------------------------------------------
+# 4. GEOMETRY OF THE DRYER BOX ("house" shape)
+# -----------------------------------------------------------------------------
+#
+#   Side view (looking from the east, long axis north-south):
+#
+#                         ____________________________ ridge
+#                        /                            \
+#       roof  ->        /                              \      <- 0.21 m roof rise
+#                      |------------------------------|
+#  walls (0.14 m) ->   |  black floor  |  tray  | tray |
+#                      |_______________|________|______|      <- floor, 1.5 m above ground
+#                       ^^ fans (inlet)                  outlet (gable triangle) ->
+#                      |<--- 1.0 m --->|<----- 2.0 m ---->|
+#                      |<--------------- 3.0 m ------------>|
+#
+#   Cross-section (looking along the long axis):
+#
+#                 /\          <- roof rise 0.21 m (the "gable triangle")
+#               /    \
+#              |      |       <- wall height 0.14 m
+#              |______|
+#               1.0 m
+#
+#   The model splits the box into TWO ZONES along the airflow:
+#     zone 1 "collector": the part with the black floor. Air is heated here.
+#     zone 2 "drying"   : the part with the trays. The product dries here.
+#
+geometry:
+  length_m: 3              # Total inside length of the floor (long axis).
+  width_m: 1               # Inside width of the floor.
+  wall_height_m: 0.14         # Height of the vertical walls ("base of the house").
+  roof_rise_m: 0.21           # Height of the roof ridge ABOVE the top of the walls.
+  collector_length_m: 1     # Length of the black-painted floor section (zone 1).
+                             # The drying zone is the rest: length_m - collector_length_m.
+  elevation_above_ground_m: 1.5
+                             # Height of the floor above the ground. Information only in
+                             # this version: the model assumes the underside of the floor
+                             # is exposed to the wind (because the dryer stands on legs).
+  inlet_end_azimuth_deg: 180 # Compass direction the INLET end wall faces (where the fans
+                             # are). 0 = north, 90 = east, 180 = south, 270 = west.
+                             # 180 means: fans at the south end, outlet at the north end,
+                             # long axis north-south. Use 0 to swap the ends.
+
+
+# -----------------------------------------------------------------------------
+# 5. TRANSPARENT COVER (the plastic)
+# -----------------------------------------------------------------------------
+cover:
+  solar_transmittance: 0.85  # Fraction of sunlight passing through the plastic when the
+                             # sun shines straight onto it. [ESTIMATE] New clear PE film
+                             # ~0.85-0.90; old dusty or yellowed film can be 0.6-0.7!
+  angle_loss_b0: 0.10        # How quickly transmittance drops when the sun hits the plastic
+                             # at a flat angle (ASHRAE incidence-angle model).
+                             # 0.1 is typical; leave it unless you have measurements.
+  ir_transmittance: 0.30     # Fraction of the heat RADIATION (infrared) from the hot black
+                             # floor that escapes straight through the plastic to the sky.
+                             # [ESTIMATE] plain polyethylene film ~0.7-0.8 (bad!),
+                             # "thermic"/IR-blocking greenhouse film ~0.2-0.3,
+                             # polycarbonate or acrylic sheet ~0.0 (good).
+  interior_capture_fraction: 0.90
+                             # Fraction of the sunlight that enters the box and actually lands
+                             # on the floor / trays (the rest leaves again through the other
+                             # side). 0.9 is reasonable for a flat box like this one.
+  heat_capacity_J_m2K: 500   # Heat storage of 1 m2 of cover incl. frame. Small; only makes
+                             # the air temperature react a bit more slowly.
+
+  # Optional: make individual surfaces NOT transparent (e.g. a wooden end wall).
+  # Surface names are printed when you run run_day.py. Example:
+  #   opaque_surfaces: [end_S_collector]
+  opaque_surfaces: []
+
+  # Optional: partial shading of the DIRECT sunlight on individual surfaces, as a
+  # fraction 0..1 (e.g. a tree shading half of the west roof). Example:
+  #   beam_shading: {roof_W_drying: 0.5, roof_W_collector: 0.5}
+  beam_shading: {}
+
+
+# -----------------------------------------------------------------------------
+# 6. OPAQUE PARTS (floor boards and any non-transparent walls)
+# -----------------------------------------------------------------------------
+construction:
+  board_thickness_m: 0.012   # Thickness of the floor board (plywood).
+  board_conductivity_W_mK: 0.13
+                             # Thermal conductivity of the board. Plywood ~0.13,
+                             # metal sheet ~50 (i.e. no insulation at all).
+  insulation_thickness_m: 0.0
+                             # Insulation UNDER the floor (e.g. styrofoam). 0 = none.
+                             # Try 0.03 to see how much heat you lose through the floor!
+  insulation_conductivity_W_mK: 0.035
+                             # Styrofoam / rock wool ~0.035, rice husk ~0.06, coconut fibre ~0.05.
+
+
+# -----------------------------------------------------------------------------
+# 7. BLACK ABSORBER (the black-painted floor of zone 1)
+# -----------------------------------------------------------------------------
+absorber:
+  solar_absorptance: 0.95    # Fraction of sunlight absorbed. Matte black paint ~0.95,
+                             # glossy black ~0.90, dark grey ~0.8.
+  thermal_emittance: 0.90    # How strongly the black surface radiates heat. Normal black
+                             # paint ~0.9. (Special "selective" coatings ~0.1-0.2.)
+  heat_capacity_J_m2K: 11500 # Heat stored per m2 per K. 12 mm plywood ~ 7 kg/m2 x 1600 J/kgK.
+                             # A thin metal sheet on top adds little. Bigger = slower warm-up.
+
+
+# -----------------------------------------------------------------------------
+# 8. TRAYS AND PRODUCT (zone 2)
+# -----------------------------------------------------------------------------
+trays:
+  count: 2                   # Number of trays (side by side in the drying zone).
+  length_m: 1              # Size of one tray along the long axis.
+  width_m: 1               # Size of one tray across the box.
+  height_above_floor_m: 0.15 # Mounting height above the floor. Information + used to check
+                             # that the trays fit below the wall top.
+  layer_thickness_m: 0.03    # Thickness of tray + product layer. It blocks part of the
+                             # cross-section the air flows through.
+  product_load_kg_m2: 3.0    # Fresh product per m2 of tray. Typical 3-8 kg/m2 for sliced fruit.
+  product_specific_heat_J_kgK: 3600
+                             # Heat capacity of the wet product. Fresh fruit/veg ~3500-3900.
+  tray_heat_capacity_J_m2K: 2000
+                             # Heat capacity of the empty tray (frame + mesh) per m2.
+  solar_absorptance: 0.70    # Fraction of sunlight absorbed by the product. Dark/red produce
+                             # (chili, mango) ~0.7-0.8, light produce (banana, cassava) ~0.5-0.6.
+  thermal_emittance: 0.90    # Wet produce radiates like a black body (~0.9).
+  air_contact_factor: 2.0    # The air touches the product from above AND from below through
+                             # the mesh, so the heat exchange area is about 2 x tray area.
+  flow_loss_coefficient: 0.5 # Pressure loss caused by ONE tray in the airflow (dimensionless
+                             # "K value", see section 10). [ESTIMATE]
+  floor_absorptance: 0.50    # Absorptance of the floor under the trays (only sunlight that
+                             # falls next to the trays reaches it).
+
+
+# -----------------------------------------------------------------------------
+# 9. EVAPORATION (how much water the product releases)
+# -----------------------------------------------------------------------------
+#  In this version we do NOT model how the product dries. Instead you say how much
+#  water leaves the product per day. The model then calculates what this does to
+#  the air (cooling + humidity). If the air cannot hold that much water (outlet
+#  would become saturated), the evaporation is automatically limited and the
+#  summary reports how much water was really removed.
+#
+#  Rule of thumb: 1 kg of fresh fruit (85 % water) dried to 15 % water releases
+#  about 0.82 kg of water. Over 2-3 sunny days this is 0.3-0.4 kg water per kg
+#  fresh product per day.
+evaporation:
+  daily_water_removal_kg: 6.0
+                             # Target water removal per day for the whole dryer.
+                             # Default: 2 trays x 2.25 m2 x 4 kg/m2 = 18 kg fresh product,
+                             # 6 kg water/day = dry in ~2.5 days. Set 0 for an empty dryer.
+  profile: sun               # How the evaporation is spread over the day:
+                             #   "sun"      = proportional to the sunshine (most at noon)
+                             #   "constant" = the same rate all day and night
+  max_outlet_rh: 0.95        # The outlet air may not get wetter than this relative humidity
+                             # (0.95 = 95 %). Above this, evaporation is limited.
+
+
+# -----------------------------------------------------------------------------
+# 10. OPENINGS (inlet and outlet)
+# -----------------------------------------------------------------------------
+#  Every opening (and every obstacle like a tray) causes a pressure loss:
+#
+#        pressure_loss = K * (air density) * (air velocity)^2 / 2
+#
+#  K is the "loss coefficient" (no unit). The velocity is the airflow divided by
+#  the (effective) opening area. Halving the area doubles the velocity and
+#  therefore QUADRUPLES the pressure loss. The fans must overcome the sum of all
+#  losses - that is how the opening sizes influence the airflow.
+#
+#  Typical K values: sharp-edged opening 1.0 (outlet) / 0.5 (inlet), rounded
+#  opening 0.05-0.2, insect mesh is handled separately via mesh_open_fraction.
+openings:
+  inlet:
+    # The inlet is formed by the fans themselves (mounted in the floor, blowing
+    # upwards). Its area is calculated from the fan size in section 11.
+    loss_coefficient: 0.5    # Loss of the air entering/leaving the fan opening.
+    mesh_open_fraction: 0.7  # Open fraction of an insect mesh / finger guard in front of the
+                             # fans. 1.0 = no mesh. Typical insect mesh 0.5-0.7.
+    elevation_m: 0.0         # Height of the inlet above the box floor (fans are in the floor).
+
+  outlet:
+    shape: gable_triangle    # "gable_triangle" = the whole triangle below the roof at the
+                             #                    outlet end, minus a strip at the top
+                             # "rectangle"      = a rectangular opening (set width/height)
+    top_cut_m: 0.04          # gable_triangle only: height cut off at the top for mounting.
+    width_m: 0.30            # rectangle only.
+    height_m: 0.10           # rectangle only.
+    elevation_m: 0.30        # rectangle only: height of the centre above the floor.
+                             # (For the gable triangle the centre height is calculated.)
+    loss_coefficient: 1.0    # Sharp-edged outlet: all the air velocity is lost -> K = 1.
+    mesh_open_fraction: 0.6  # Insect mesh over the outlet. 1.0 = no mesh.
+
+
+# -----------------------------------------------------------------------------
+# 11. FANS
+# -----------------------------------------------------------------------------
+#  A fan can produce a high pressure at low airflow, or a high airflow at low
+#  pressure - this is its "fan curve". The model finds the point where the fan
+#  pressure equals the pressure losses of the box (the "operating point").
+#
+#  curve_source = generic: the curve is a parabola through two points of a
+#     REFERENCE fan:   (airflow 0, shutoff pressure) and (free airflow, pressure 0).
+#     If you change frame_size_mm or speed_rpm, the curve is scaled with the
+#     standard "fan laws":   airflow ~ speed x size^3,   pressure ~ speed^2 x size^2.
+#     This lets you compare fan sizes without a datasheet (rough!).
+#  curve_source = datasheet: the points you type in datasheet_curve are used
+#     directly (better - take them from the fan manufacturer's PDF).
+fans:
+  # UKRIM v1.0: TWO common 120 mm computer fans, 12 V, 2 pins (+12 V and GND, no speed
+  # signal), switched by a PWM output of the Arduino. The values below are TYPICAL for a
+  # 120 x 120 x 25 mm, 12 V, ~0.17 A (2 W) sleeve-bearing fan [TYPICAL - replace with
+  # the values on the fan label / datasheet when known, and note the fan model here].
+  count: 2                   # Number of identical fans working side by side (in parallel).
+  frame_size_mm: 120         # 120 mm frame.
+  speed_rpm: 1600            # Speed at 12 V (full PWM). Typical 120 mm 2 W fan: 1200-2000 rpm.
+  hub_ratio: 0.35            # Hub diameter / blade diameter. 120 mm fans: hub ~40 mm -> ~0.35.
+                             # Used for the open area of the fan opening (the inlet).
+  curve_source: generic      # "generic" = parabola through the two reference points below.
+                             # "datasheet" = use datasheet_curve (if you have the real curve).
+
+  reference_fan:             # = the fan above (same size, same speed), so no scaling is done.
+    frame_size_mm: 120       # Keep equal to frame_size_mm above!
+    speed_rpm: 1600          # Keep equal to speed_rpm above!
+    free_airflow_m3_s: 0.0236
+                             # Airflow with NO resistance: 50 CFM = 85 m3/h [TYPICAL].
+                             # Datasheet value in CFM x 0.000472 = m3/s.
+    shutoff_pressure_Pa: 17.7
+                             # Pressure with the outlet blocked: 1.8 mm H2O [TYPICAL].
+                             # Datasheet value in mm H2O x 9.81 = Pa.
+
+  # Datasheet curve for ONE fan at full speed: list of [airflow m3/s, pressure Pa],
+  # starting at airflow 0. Only used when curve_source = datasheet. These points are the
+  # same parabola as the generic curve - replace them with the real datasheet curve.
+  datasheet_curve:
+    - [0.000, 17.7]
+    - [0.008, 15.7]
+    - [0.016,  9.6]
+    - [0.0236, 0.0]
+
+  # When do the fans run?
+  on_hour: 6.0               # Fans switch on at 06:00 ...
+  off_hour: 18.0             # ... and off at 18:00. Use 0 and 24 for "always on".
+                             # (The fan speed is set in "control" below.)
+
+  # ---------------------------------------------------------------------------
+  # FAN CONTROL - how fast the fans run between on_hour and off_hour
+  # ---------------------------------------------------------------------------
+  control:
+    mode: full               # UKRIM v1.0 runs a PID: for validation set "pid" and enter the
+                             # Kp/Ki/Kd/setpoint/sample time of the Arduino sketch below.
+                             # "full"      = full speed (PWM 255) all the time
+                             # "sun"       = fans powered directly by a small solar panel:
+                             #               speed follows the sunshine (full speed at
+                             #               sun_for_full_speed_W_m2 and above, see below)
+                             # "fixed_pwm" = the Arduino writes a constant PWM value (fixed_pwm)
+                             # "pid"       = temperature control with the Arduino PID (see pid)
+    fixed_pwm: 180           # Only for mode fixed_pwm: PWM value 0..255.
+
+    # Which temperature the controller reads. Names from section 14 (sensors) use
+    # the SIMULATED SENSOR READING (incl. the case heating!), like the real Arduino.
+    # You can also use the true values: air_outlet, air_collector, product, plate.
+    input:
+      sources: [S1_collector, S2_tray, S3_tray]
+      combine: max           # "max" = the prototype uses the highest of the readings;
+                             # "mean" or "min" are also possible.
+      resolution_C: 0.1      # The DHT21 gives temperatures in steps of 0.1 degC.
+      read_interval_s: 2     # How often new sensor values are read. The DHT21 cannot be read
+                             # faster than every 2 s. Between readings the old value is used.
+
+    # PID controller - an exact copy of the Arduino library PID_v1_bc (David Forrest).
+    # Copy the values from your Arduino sketch:
+    #     PID myPID(&Input, &Output, &Setpoint, Kp, Ki, Kd, P_ON_E, REVERSE);
+    #     myPID.SetSampleTime(...);  myPID.SetOutputLimits(min, max);
+    # The PID output is the PWM value 0..255 that analogWrite() sends to the fans.
+    pid:
+      setpoint_C: 45.0       # Target temperature (of the controller input above).
+      Kp: 20.0               # [ESTIMATE - use your prototype values] PWM per K of error.
+      Ki: 0.05               # [ESTIMATE] PWM per (K x second). Arduino units: per SECOND.
+      Kd: 0.0                # [ESTIMATE] PWM per (K / second).
+      direction: reverse     # "reverse" = more output when the temperature is ABOVE the
+                             #   setpoint. This is right for cooling with fans (REVERSE in
+                             #   the Arduino sketch). "direct" = the opposite (heaters).
+      proportional_on: error # "error" (P_ON_E, the default) or "measurement" (P_ON_M).
+      sample_time_ms: 100    # SetSampleTime(); the library default is 100 ms. Ki and Kd are
+                             # scaled with it exactly like in the library.
+      loop_period_ms: 100    # How long one pass of loop() really takes on the Arduino. If the
+                             # sketch waits for the DHT21 (e.g. delay(2000)), Compute() runs
+                             # less often than sample_time_ms - enter that time here.
+      output_min: 0          # SetOutputLimits(min, max). E.g. a minimum of 80 keeps the fans
+      output_max: 255        # always turning (some air exchange even when it is too cold).
+
+  # How the PWM value becomes fan speed. The 2-pin fans are switched on/off very fast
+  # by the PWM output, so they see an average voltage. A fan cannot turn very slowly:
+  pwm:
+    max_value: 255           # PWM range of analogWrite() (8 bit).
+    stop_below: 60           # [ESTIMATE - measure] below this PWM value the fan stands still.
+    start_at: 90             # [ESTIMATE - measure] a standing fan needs at least this to start.
+    speed_at_stop_below: 0.30
+                             # Speed (fraction of full speed) at the lowest running PWM value.
+                             # Above it the speed rises in a straight line to 1.0 at 255.
+    curve: []                # Optional: your own measurements as [PWM, speed fraction] pairs,
+                             # e.g. [[60, 0.3], [128, 0.6], [255, 1.0]]. Replaces the line above.
+
+  # Settings for mode "sun":
+  sun_for_full_speed_W_m2: 700
+  min_speed_fraction: 0.3    # Mode "sun": below this fraction of full speed the fan stalls.
+  stopped_fan_loss_coefficient: 4.0
+                             # When a fan stands still, air can still pass through it, but
+                             # with a high loss (K value). [ESTIMATE]
+  electric_power_W: 2.0      # Electrical power of ONE fan at full speed: 2 W (v1 drawing:
+                             # 2 x 2 W fans; 12 V x 0.17 A). Used for the summary only;
+                             # at lower speed the power drops with about speed^3).
+
+
+# -----------------------------------------------------------------------------
+# 12. HEAT TRANSFER COEFFICIENTS (advanced - normally leave as they are)
+# -----------------------------------------------------------------------------
+#  A heat transfer coefficient h (W/m2K) says how many watts flow through 1 m2
+#  per kelvin of temperature difference. They depend on the air velocity v:
+#        h = a + b * v
+heat_transfer:
+  outside_a: 5.7             # Outside surfaces (convection + radiation), McAdams correlation:
+  outside_b: 3.8             #   h_out = 5.7 + 3.8 * wind speed
+  inside_a: 2.8              # Inside surfaces (convection only), Watmuff correlation:
+  inside_b: 3.0              #   h_in = 2.8 + 3.0 * air velocity inside the box
+  min_air_mass_flow_kg_s: 0.0005
+                             # Small leakage airflow that always exists, even without fans
+                             # and wind (keeps the calculation stable at night).
+
+
+# -----------------------------------------------------------------------------
+# 13. EVALUATION SETTINGS (used for the summary)
+# -----------------------------------------------------------------------------
+evaluation:
+  product_max_temperature_C: 60
+                             # Above this temperature the product quality suffers (vitamins,
+                             # colour, case hardening). Fruit ~55-65, vegetables ~60-65,
+                             # seeds/grain for planting ~40-45.
+  daytime_start_hour: 8.0    # Daytime window for the averages in the summary.
+  daytime_end_hour: 16.0
+
+
+# -----------------------------------------------------------------------------
+# 14. SENSORS - simulate what the DHT21 sensors in the prototype will SHOW
+# -----------------------------------------------------------------------------
+#  A DHT21 (also sold as AM2301) measures the temperature of its own plastic
+#  case, not the air. In the dryer the case is warmed by the sun and by heat
+#  radiation from the hot black floor / product, so it shows a temperature that
+#  is TOO HIGH - and therefore a relative humidity that is TOO LOW.
+#
+#  The model calculates the temperature of each sensor case and writes, for
+#  every sensor, these columns to timeseries.csv:
+#     sensor_<name>_T_C         what the sensor shows
+#     sensor_<name>_air_T_C     the true air temperature at that position
+#     sensor_<name>_error_K     the difference (shown - true)
+#     sensor_<name>_RH_pct      relative humidity the sensor shows
+#     sensor_<name>_air_RH_pct  true relative humidity of the air
+#  and plots them in sensors.png.  Compare sensor_<name>_T_C with your
+#  measurements - NOT the air temperature!
+#
+#  Datasheet accuracy of the DHT21 itself: about +-0.5 degC and +-3 % RH.
+#  The errors caused by heating up are usually much larger than that.
+sensors:
+  enabled: true              # false = do not simulate sensors
+
+  case:                      # Properties of the sensor housing, the same for all sensors.
+    length_mm: 59            # Size of the plastic case [ESTIMATE - measure yours].
+    width_mm: 27
+    thickness_mm: 13.5
+    mass_g: 10               # Mass of the case incl. electronics (without cable) [ESTIMATE].
+    specific_heat_J_kgK: 1400
+                             # Heat capacity of plastic (ABS) ~1400. Mass x this = heat storage.
+                             # (With the defaults the sensor needs ~5 minutes to follow a change.)
+    solar_absorptance: 0.85  # How much sunlight the case absorbs. The wired AM2301/DHT21 usually
+                             # has a BLACK case (~0.85-0.95). A white case would be ~0.3.
+                             # Check the colour of your sensors!
+    thermal_emittance: 0.90  # Plastic radiates heat well (~0.9) whatever its colour.
+    contact_conductance_W_m2K: 15
+                             # Only for sensors lying on a tray: how well heat flows from the
+                             # case into the tray/product it lies on [ESTIMATE].
+
+  # One entry per sensor. Each sensor can override any value of "case" above,
+  # e.g. add  solar_absorptance: 0.3  to a sensor that has a white case.
+  list:
+    - name: S1_collector     # Short name (no spaces) - used in the CSV column names.
+      zone: collector        # "collector" = above the black floor, "drying" = trays.
+      mounting: hanging      # "hanging" = in mid-air (the black floor below it heats it by
+                             #             radiation); "lying" = lying flat on a tray.
+      sun_exposure_factor: 0.4
+                             # How much of one large face of the case is hit by sunlight:
+                             #   1.0 = lying flat in full sun
+                             #   0.3-0.5 = hanging vertically (the high tropical sun hits it
+                             #             mostly from above, on the narrow edge and sides)
+                             #   0.0 = shaded (e.g. under a small white roof / radiation shield)
+                             # [ESTIMATE] - a good value to adjust when comparing to measurements.
+
+    - name: S2_tray          # Lying in the tray in the centre of the dryer.
+      zone: drying
+      mounting: lying
+      sun_exposure_factor: 1.0
+
+    - name: S3_tray          # Second sensor next to S2 (identical by default; change e.g.
+      zone: drying           # sun_exposure_factor if one of them is partly shaded).
+      mounting: lying
+      sun_exposure_factor: 1.0
