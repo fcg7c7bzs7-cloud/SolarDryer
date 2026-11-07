@@ -56,8 +56,57 @@ validation_v1.0/
 - **PID (LEN005):** Kp 500, Ki 0.1, Kd 10, REVERSE, P_ON_E. The input is the maximum of DHT2–DHT4, so DHT1 is not used. Compute() runs every 3 s (library sample time 100 ms). Output limits 80–255, so the fans always turn, day and night (confirmed: they keep turning at PWM 80).
 - **Invalid data is not used:** RH values of 99.9 % (sensor saturated or condensing, at night) and the NaN columns of DHT4.
 
-## Planned (created during the validation)
-- `data/` – cleaned data per run (WIB timestamps, sensor names, validity flags) and simulator weather input
-- `configs/` – per-run configs (only the differences from the reference config)
-- `scripts/` – data preparation, calibration and comparison
-- `results/` – plots and metrics (not committed to git)
+## Processed data, scripts and calibration
+
+| Path | Content |
+|---|---|
+| `runs.yaml` | Metadata per run (start time, fans) and the config overrides for the simulation |
+| `data/<RUN>_dryer.csv` | Cleaned logs: WIB time, sensors S1/S2/S3, invalid RH removed (`scripts/prepare_dryer_data.py`) |
+| `data/weather_5min_2026-10-07_16.csv` | All weather sources side by side, 5 min, incl. PV-derived irradiance (`scripts/prepare_weather.py`) |
+| `data/<RUN>_weather_sim.csv` | Simulator weather input per run (`weather.source: csv`) |
+| `data/scene.png`, `scene.svg` | Aerial view of the site (Google Maps); green boxes: PV system (SW), dryer and pump PV panel (north) |
+| `scripts/validation_tools.py` | Run the simulator for a measurement run and compare with the data |
+| `scripts/validate.py` | `python scripts/validate.py LEN005 --calibrated` -> plots and metrics in `results/` |
+| `scripts/calibrate.py` | Parameter fit (sets `LEN011`, `joint_v1`, `joint_v2`) |
+| `calibration.yaml` | Calibrated values (set joint_v2), used by `validate.py --calibrated` |
+| `results/` | Plots, comparison tables, fit logs (not in git; re-create with the scripts) |
+
+Run the whole chain from this folder:
+```
+python scripts/prepare_dryer_data.py
+python scripts/prepare_weather.py
+python scripts/calibrate.py joint_v2        # ~10 min
+python scripts/validate.py LEN005 --calibrated
+```
+
+### Irradiance from the PV system
+The clear-sky index is PV power divided by the PV power on the clear days 13–16 Oct at the same time of day. GHI is then the clear-sky index × the satellite irradiance of the clear days. The PV shows *when* clouds pass and *how much* they reduce the sun; the absolute level comes from the satellite data (about ±10 % uncertainty). The PV system stands about 15 m high, so it is not shaded.
+
+## Results v1.0 (calibration joint_v2, 2026-11-06)
+
+Fitted on LEN011 and LEN005 until 9 Oct 00:00. The floor under the trays is bare aluminium, so its absorptance was fixed at 0.2.
+
+| Data | S1 | S2 | S3 |
+|---|---|---|---|
+| Fit: LEN005 7–8 Oct, RMSE | 1.3 K | 3.1 K | 3.0 K |
+| Fit: LEN011, RMSE | 1.8 K | 3.8 K | 4.2 K |
+| **Validation: LEN005 9 Oct** (setpoint 40 °C) | 2.7 K | 4.5 K | 5.4 K |
+| **Validation: LEN009 nights** (fans off) | 0.8 K | 0.8 K | 0.8 K |
+| LEN009 daytime (fans-on-panel model missing) | 4–6 K too cold | | |
+
+Model changes made during the validation:
+- empty mesh trays (`trays.open_fraction`)
+- natural convection inside the box
+- sky radiation that depends on the cloud cover
+- `local_air_mix` for S1 (fresh air from the fans)
+- PID `setpoint_schedule`
+
+Limits:
+- The fitted values compensate for each other. The cover transmittance (0.92) and the tray sensors' sun exposure (1.0) ended at the edge of their allowed ranges. The most likely reason is sunlight reflected by the aluminium floor, which the model does not include. Use the fitted values together, not as individual material properties.
+- Clock offsets from the fit: LEN011 started about 22 min later than noted, LEN005 about 15 min earlier.
+- The tray sensors show about 9 g/kg more moisture than the outside air although the dryer was empty: either a moisture source or a DHT21 error at high temperature. Humidity was not used for the fit.
+
+### Shading (from data/scene.png, 2026-11-07)
+- **Pump PV panel** (about 5 m high), about 8 m WNW of the dryer, direction about 290°. In October the afternoon sun stands at about 262° (just south of west). The panel's shadow therefore points about 28° past the dryer, and it is close to the dryer only when the sun is about 25–30° high, i.e. around 15:45–16:30. Partial shading of the north (outlet) end around that time is possible. This would fit the faster cooling after about 16:00 seen on all days. It needs to be checked on site.
+- **Buildings directly east/north-east** (only a few metres away): possible shading in the early morning. Their heights are unknown.
+- **Fence:** not visible in the picture. Height, distance and material (mesh or solid) are unknown.

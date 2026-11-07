@@ -5,6 +5,7 @@ Two options (chosen in the YAML file, weather.source):
   * "synthetic": a typical day is generated from a few numbers
                  (sky clearness, min/max temperature, dew point, wind).
   * "csv":       measured data is read from a CSV file and interpolated
+                 (optional column cloud_cover_pct, 0-100, for the sky radiation)
                  to the time steps of the simulation.
 
 Both return a pandas DataFrame with one row per time step and columns:
@@ -56,8 +57,8 @@ def synthetic_weather(cfg, hours):
         ghi = s["sky_clearness"] * solar.clear_sky_ghi(zen)
         t = _daily_temperature(h, s["t_min_C"], s["t_max_C"], s["hour_t_min"], s["hour_t_max"])
         rh = min(psychro.relative_humidity(t, w_amb, p), 1.0)
-        rows.append((h, ghi, np.nan, t, rh, s["wind_speed_m_s"]))
-    return pd.DataFrame(rows, columns=["hour", "ghi", "dhi", "t_amb", "rh_amb", "wind"])
+        rows.append((h, ghi, np.nan, t, rh, s["wind_speed_m_s"], s.get("cloud_cover_pct", 0) / 100))
+    return pd.DataFrame(rows, columns=["hour", "ghi", "dhi", "t_amb", "rh_amb", "wind", "cloud"])
 
 
 def csv_weather(cfg, hours):
@@ -82,6 +83,9 @@ def csv_weather(cfg, hours):
     out["t_amb"] = np.interp(hours, df["hour"], df["t_amb_C"])
     out["rh_amb"] = np.interp(hours, df["hour"], df["rh_percent"]) / 100.0
     out["wind"] = np.interp(hours, df["hour"], df["wind_m_s"])
+    # optional: cloud cover 0-100 % (affects the night-time heat radiation to the sky)
+    out["cloud"] = (np.interp(hours, df["hour"], df["cloud_cover_pct"]) / 100
+                    if "cloud_cover_pct" in df.columns else 0.0)
     return out
 
 

@@ -229,7 +229,10 @@ trays:
   flow_loss_coefficient: 0.5 # Pressure loss caused by ONE tray in the airflow (dimensionless
                              # "K value", see section 10). [ESTIMATE]
   floor_absorptance: 0.50    # Absorptance of the floor under the trays (only sunlight that
-                             # falls next to the trays reaches it).
+                             # falls next to the trays or through open mesh reaches it).
+  open_fraction: 0.0         # Open part of the tray area (mesh holes not covered by product):
+                             # light, heat radiation and air pass through. 0 = fully covered by
+                             # product; EMPTY mesh trays ~0.6-0.8 [ESTIMATE].
 
 
 # -----------------------------------------------------------------------------
@@ -375,6 +378,9 @@ fans:
     # The PID output is the PWM value 0..255 that analogWrite() sends to the fans.
     pid:
       setpoint_C: 45.0       # Target temperature (of the controller input above).
+      setpoint_schedule: []  # Optional setpoint changes during the run (e.g. button presses):
+                             # [[hour, setpoint], ...], hour counted from 00:00 of the start
+                             # date. Example: [[56.5, 40]] = 40 degC from day 3, 08:30.
       Kp: 20.0               # [ESTIMATE - use your prototype values] PWM per K of error.
       Ki: 0.05               # [ESTIMATE] PWM per (K x second). Arduino units: per SECOND.
       Kd: 0.0                # [ESTIMATE] PWM per (K / second).
@@ -424,6 +430,9 @@ heat_transfer:
   outside_b: 3.8             #   h_out = 5.7 + 3.8 * wind speed
   inside_a: 2.8              # Inside surfaces (convection only), Watmuff correlation:
   inside_b: 3.0              #   h_in = 2.8 + 3.0 * air velocity inside the box
+  natural_convection: true   # Also include natural convection (warm surfaces in still air):
+                             #   h_nat = 1.52 * dT^(1/3) (floor, trays) / 1.31 * dT^(1/3) (cover)
+                             # combined with h_in. Important when the fans are slow or off.
   min_air_mass_flow_kg_s: 0.0005
                              # Small leakage airflow that always exists, even without fans
                              # and wind (keeps the calculation stable at night).
@@ -494,6 +503,10 @@ sensors:
                              #             mostly from above, on the narrow edge and sides)
                              #   0.0 = shaded (e.g. under a small white roof / radiation shield)
                              # [ESTIMATE] - a good value to adjust when comparing to measurements.
+      local_air_mix: 1.0     # Only zone "collector": share of mixed zone air at the sensor when
+                             # the fans run at full speed. 1 = the sensor sees the mixed air of
+                             # the zone; lower = it sits partly in the jet of fresh outside air
+                             # from the fans (e.g. 0.5 = halfway between outside and zone air).
 
     - name: S2_tray          # Lying in the tray in the centre of the dryer.
       zone: drying

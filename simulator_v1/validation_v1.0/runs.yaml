@@ -1,0 +1,59 @@
+# Metadata of the three measurement runs (used by the scripts in scripts/).
+# Times are WIB (UTC+7). See README.md for details.
+
+sensor_map:              # logger column -> sensor name in the simulator (section 14 of the config)
+  DHT1: S1_collector     # most likely hanging above the black floor (not 100 % certain)
+  DHT2: S2_tray          # lying on the tray
+  DHT3: S3_tray          # lying on the tray
+  DHT4: S4_outside       # not connected in these runs (all NaN)
+
+rh_invalid_above_pct: 99.0   # DHT21 reports 99.9 % when saturated / condensing -> not used
+
+# Settings for ALL validation runs, applied on top of ../config/UKRIM_dryer_v1.0_default.yaml
+common_overrides:
+  location.latitude_deg: -7.768        # weather grid point next to UKRIM
+  location.longitude_deg: 110.468
+  location.altitude_m: 125
+  weather.source: csv                  # data/<RUN>_weather_sim.csv (made by prepare_weather.py)
+  evaporation.daily_water_removal_kg: 0.0   # dryer was empty
+  trays.product_load_kg_m2: 0.0        # empty trays: only the tray itself stores heat
+  trays.open_fraction: 0.7             # empty mesh trays let most light through [ESTIMATE]
+  fans.on_hour: 0.0                    # the Arduino has no time schedule
+  fans.off_hour: 24.0
+  run.time_step_s: 30
+
+runs:
+  LEN005:
+    file: raw/dryer/LEN005_fans_PID.csv
+    start: "2026-10-07 12:05"
+    start_known: false       # estimated by the team
+    fans: pid                # Arduino PID, PWM 80-255, setpoint from column TargetTemp_C
+    overrides:               # from raw/dryer/LEN005_arduino_code.ino
+      fans.control.mode: pid
+      fans.control.input.sources: [S2_tray, S3_tray]   # max of DHT2..DHT4 (DHT4 = NaN)
+      fans.control.input.read_interval_s: 3
+      fans.control.pid.Kp: 500
+      fans.control.pid.Ki: 0.1
+      fans.control.pid.Kd: 10
+      fans.control.pid.direction: reverse
+      fans.control.pid.proportional_on: error
+      fans.control.pid.sample_time_ms: 100
+      fans.control.pid.loop_period_ms: 3000   # controlFan() -> Compute() every 3 s
+      fans.control.pid.output_min: 80
+      fans.control.pid.output_max: 255
+      fans.control.pid.setpoint_C: 50.0       # changes are taken from the data
+  LEN009:
+    file: raw/dryer/LEN009_fans_on_PV_panel.csv
+    start: "2026-10-12 12:37"
+    start_known: true        # checked with an external clock
+    fans: pv_direct          # fans connected directly to the PV panel; PWM column meaningless
+    overrides:
+      fans.control.mode: sun   # placeholder until the PV-fan model exists
+  LEN011:
+    file: raw/dryer/LEN011_no_fans.csv
+    start: "2026-10-14 09:05"
+    start_known: false
+    fans: off                # fans disconnected; PWM column meaningless
+    overrides:
+      fans.control.mode: fixed_pwm
+      fans.control.fixed_pwm: 0   # fans stand still; air can still flow through them

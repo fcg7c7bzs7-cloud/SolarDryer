@@ -55,9 +55,16 @@ def _k(t_c):
     return t_c + 273.15
 
 
-def sky_temperature(t_amb_c):
-    """Effective temperature of the sky for heat radiation (Swinbank 1963) [degC]."""
-    return 0.0552 * _k(t_amb_c) ** 1.5 - 273.15
+def sky_temperature(t_amb_c, cloud_cover=0.0):
+    """
+    Effective temperature of the sky for heat radiation [degC].
+    Clear sky: Swinbank (1963), ~10-15 K below the air temperature in the tropics.
+    Clouds radiate back like a body at about air temperature, so a cloud cover c (0..1)
+    mixes the two:  T_sky^4 = (1 - c) * T_clear^4 + c * T_air^4.
+    """
+    t_clear = 0.0552 * _k(t_amb_c) ** 1.5
+    c = min(max(cloud_cover, 0.0), 1.0)
+    return ((1 - c) * t_clear ** 4 + c * _k(t_amb_c) ** 4) ** 0.25 - 273.15
 
 
 class DryerModel:
@@ -78,8 +85,11 @@ class DryerModel:
                         for z in ("collector", "drying")}
         self.a_opaque = {z: sum(s.area for s in geom.surfaces_in_zone(z, "opaque"))
                          for z in ("collector", "drying")}
-        self.a_contact_prod = t["air_contact_factor"] * geom.tray_area
-        self.tray_floor_fraction = min(1.0, geom.tray_area / geom.drying_floor_area)
+        # Open (mesh) part of the trays: light, heat radiation and air pass through it.
+        # 0 = trays fully covered by product; empty mesh trays ~0.6-0.8.
+        self.solid = 1.0 - t.get("open_fraction", 0.0)
+        self.a_contact_prod = t["air_contact_factor"] * geom.tray_area * self.solid
+        self.tray_floor_fraction = min(1.0, geom.tray_area / geom.drying_floor_area) * self.solid
 
         # Heat capacities [J/K]
         self.c_plate = a["heat_capacity_J_m2K"] * geom.absorber_area
@@ -141,7 +151,7 @@ class DryerModel:
         w_amb = psychro.humidity_ratio(t_amb, wx["rh_amb"], p)
         rho_amb = psychro.density(t_amb, w_amb, p)
         cp = psychro.cp_humid(w_amb)
-        t_sky = sky_temperature(t_amb)
+        t_sky = sky_temperature(t_amb, wx.get("cloud", 0.0))
         tau_ir = cfg["cover"]["ir_transmittance"]
         eps_p = cfg["absorber"]["thermal_emittance"]
         eps_t = cfg["trays"]["thermal_emittance"]
@@ -163,20 +173,33 @@ class DryerModel:
 
             # 2) heat transfer coefficients
             v_in = m / (rho_box * geom.cross_section_free_area)  # air speed in the box
-            h_in = ht["inside_a"] + ht["inside_b"] * v_in
-            u_cover = 1.0 / (1.0 / h_in + 1.0 / h_out)
-            u_wall = 1.0 / (1.0 / h_in + self.r_board + 1.0 / h_out)
+            h_in = ht["inside_a"] + ht["inside_b"] * v_in       # forced convection
+            # Natural convection (warm surfaces in still air) matters when the fans are slow
+            # or off: h_nat = C * dT^(1/3) (McAdams, turbulent; C = 1.52 for a hot surface
+            # facing up, 1.31 for walls / cover). Combined: (h_forced^3 + h_nat^3)^(1/3).
+            nat = ht.get("natural_convection", True)
+
+            def comb(d_t, c):
+                if not nat:
+                    return h_in
+                return (h_in ** 3 + (c * abs(d_t) ** (1 / 3)) ** 3) ** (1 / 3)
+
+            h_cov1 = comb(0.5 * (ta1 - t_amb), 1.31)   # cover is about halfway between air and outside
+            h_cov2 = comb(0.5 * (ta2 - t_amb), 1.31)
+            h_plate = comb(tp - ta1, 1.52)
+            h_tray = comb(tt - ta2, 1.52)
             u_back = 1.0 / (self.r_board + self.r_ins + 1.0 / h_out)
-            u_floor2 = 1.0 / (1.0 / h_in + self.r_board + self.r_ins + 1.0 / h_out)
-            ua1 = u_cover * self.a_cover["collector"] + u_wall * self.a_opaque["collector"]
-            ua2 = (u_cover * self.a_cover["drying"] + u_wall * self.a_opaque["drying"]
-                   + u_floor2 * geom.drying_floor_area)
+            ua1 = (self.a_cover["collector"] / (1.0 / h_cov1 + 1.0 / h_out)
+                   + self.a_opaque["collector"] / (1.0 / h_cov1 + self.r_board + 1.0 / h_out))
+            ua2 = (self.a_cover["drying"] / (1.0 / h_cov2 + 1.0 / h_out)
+                   + self.a_opaque["drying"] / (1.0 / h_cov2 + self.r_board + 1.0 / h_out)
+                   + geom.drying_floor_area / (1.0 / h_cov2 + self.r_board + self.r_ins + 1.0 / h_out))
 
             # 3) heat radiation of plate and product (uses the old plate/product temperature)
             rad_p = eps_p * SIGMA * geom.absorber_area
             q_rad_cov_p = (1 - tau_ir) * rad_p * (_k(tp) ** 4 - _k(ta1) ** 4)
             q_rad_sky_p = tau_ir * rad_p * (_k(tp) ** 4 - _k(t_sky) ** 4)
-            rad_t = eps_t * SIGMA * geom.tray_area
+            rad_t = eps_t * SIGMA * geom.tray_area * self.solid
             q_rad_cov_t = (1 - tau_ir) * rad_t * (_k(tt) ** 4 - _k(ta2) ** 4)
             q_rad_sky_t = tau_ir * rad_t * (_k(tt) ** 4 - _k(t_sky) ** 4)
 
@@ -188,8 +211,8 @@ class DryerModel:
             # 5) air temperatures (implicit Euler: energy balance of each air node)
             c1 = self.c_air["collector"] / dt
             c2 = self.c_air["drying"] / dt
-            ha_p = h_in * geom.absorber_area
-            ha_t = h_in * self.a_contact_prod
+            ha_p = h_plate * geom.absorber_area
+            ha_t = h_tray * self.a_contact_prod
             ta1_new = ((c1 * state["T_air1"] + m * cp * t_amb + ha_p * tp + q_rad_cov_p + ua1 * t_amb)
                        / (c1 + m * cp + ha_p + ua1))
             ta2_new = ((c2 * state["T_air2"] + m * cp * ta1_new + ha_t * tt + q_rad_cov_t
@@ -238,6 +261,8 @@ class DryerModel:
             "t_amb_C": t_amb,
             "rh_amb_pct": 100 * wx["rh_amb"],
             "wind_m_s": wx["wind"],
+            "cloud_cover": wx.get("cloud", 0.0),
+            "t_sky_C": t_sky,
             "fan_speed_fraction": speed,
             "T_plate_C": tp,
             "T_air_collector_C": ta1,

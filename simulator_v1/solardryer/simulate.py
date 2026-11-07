@@ -64,7 +64,8 @@ def run_simulation(cfg, verbose=False):
     for i in range(n_steps + 1):
         w = wx.iloc[i]
         wxd = {"ghi": float(w["ghi"]), "dhi": float(w["dhi"]), "t_amb": float(w["t_amb"]),
-               "rh_amb": float(w["rh_amb"]), "wind": float(w["wind"])}
+               "rh_amb": float(w["rh_amb"]), "wind": float(w["wind"]),
+               "cloud": float(w["cloud"]) if "cloud" in w else 0.0}
         ctrl = controller.advance(float(w["hour"]), dt, wxd["ghi"])
         state, out = model.step(state, wxd, float(w["hour"]), dt, float(evap[i]),
                                 speed=ctrl["speed"])
@@ -77,7 +78,7 @@ def run_simulation(cfg, verbose=False):
                               * ctrl["speed"] ** 3)
         if controller.mode == "pid":
             out["control_input_C"] = ctrl["input"]
-            out["control_setpoint_C"] = pid_cfg["setpoint_C"]
+            out["control_setpoint_C"] = ctrl.get("setpoint", pid_cfg["setpoint_C"])
             out["pid_output"] = ctrl["pid_output"]
             out["pid_integral"] = ctrl["pid_integral"]
             controller.remember(controller.measured_input(out, sensor_model.enabled))

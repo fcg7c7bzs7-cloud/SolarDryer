@@ -106,12 +106,17 @@ class SensorModel:
         """
         out = {}
         new = {}
-        t_sky = 0.0552 * _k(o["t_amb_C"]) ** 1.5 - 273.15
+        t_sky = o.get("t_sky_C", 0.0552 * _k(o["t_amb_C"]) ** 1.5 - 273.15)
         for s in self.sensors:
             name = s["name"]
             ts = temps[name]
             if s["zone"] == "collector":
                 t_air = o["T_air_collector_C"]
+                # A sensor close to the fan inlet sits partly in the jet of fresh outside
+                # air. local_air_mix = share of mixed zone air at the sensor when the fans
+                # run at full speed (1 = fully mixed zone air, 0 = pure inlet air).
+                mix = 1.0 - (1.0 - s.get("local_air_mix", 1.0)) * o.get("fan_speed_fraction", 0.0)
+                t_air = o["t_amb_C"] + mix * (t_air - o["t_amb_C"])
                 w = o["w_amb"]
                 t_below = o["T_plate_C"]  # a hanging sensor "sees" the black floor below it
                 sun = o["q_in_collector_W"] / self.geom.absorber_area  # W/m2 inside

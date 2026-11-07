@@ -217,7 +217,10 @@ trays:
   flow_loss_coefficient: 0.5 # Pressure loss caused by ONE tray in the airflow (dimensionless
                              # "K value", see section 10). [ESTIMATE]
   floor_absorptance: 0.50    # Absorptance of the floor under the trays (only sunlight that
-                             # falls next to the trays reaches it).
+                             # falls next to the trays or through open mesh reaches it).
+  open_fraction: 0.0         # Open part of the tray area (mesh holes not covered by product):
+                             # light, heat radiation and air pass through. 0 = fully covered by
+                             # product; EMPTY mesh trays ~0.6-0.8 [ESTIMATE].
 
 
 # -----------------------------------------------------------------------------
@@ -401,6 +404,9 @@ heat_transfer:
   outside_b: 3.8             #   h_out = 5.7 + 3.8 * wind speed
   inside_a: 2.8              # Inside surfaces (convection only), Watmuff correlation:
   inside_b: 3.0              #   h_in = 2.8 + 3.0 * air velocity inside the box
+  natural_convection: true   # Also include natural convection (warm surfaces in still air):
+                             #   h_nat = 1.52 * dT^(1/3) (floor, trays) / 1.31 * dT^(1/3) (cover)
+                             # combined with h_in. Important when the fans are slow or off.
   min_air_mass_flow_kg_s: 0.0005
                              # Small leakage airflow that always exists, even without fans
                              # and wind (keeps the calculation stable at night).

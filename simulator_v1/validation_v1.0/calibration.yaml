@@ -1,0 +1,17 @@
+source: calibration joint_v2 (LEN011 + LEN005 until 9 Oct 00:00)
+parameters:
+  trays.air_contact_factor: 10.0
+  trays.floor_absorptance: 0.2
+  cover.solar_transmittance: 0.92
+  cover.ir_transmittance: 0.5199
+  heat_transfer.min_air_mass_flow_kg_s: 0.0067
+  fans.reference_fan.free_airflow_m3_s: 0.0312
+  fans.pwm.speed_at_stop_below: 0.6558
+sensors:
+  S2_tray.sun_exposure_factor: 1.0
+  S3_tray.sun_exposure_factor: 1.0
+  S1_collector.sun_exposure_factor: 0.1122
+  S1_collector.local_air_mix: 0.1034
+clock_offsets_min:
+  LEN011: 22.327
+  LEN005: -15.3955

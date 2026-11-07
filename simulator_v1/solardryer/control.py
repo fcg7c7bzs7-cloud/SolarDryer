@@ -131,6 +131,10 @@ class FanController:
         if self.mode == "pid":
             p = c["pid"]
             self.setpoint = p["setpoint_C"]
+            # optional: setpoint changes during the run, [[hour, setpoint], ...] (hour counted
+            # from 00:00 of the start date), e.g. when the buttons were pressed
+            sched = p.get("setpoint_schedule") or []
+            self.schedule = sorted((float(h), float(v)) for h, v in sched)
             self.sample_s = p["sample_time_ms"] / 1000.0
             loop_s = max(p["loop_period_ms"], 1) / 1000.0
             # Compute() only runs in a loop() pass where >= SampleTime has elapsed
@@ -177,6 +181,13 @@ class FanController:
         self.history = (self.history[1], value)
 
     # ------------------------------------------------------------------
+    def setpoint_at(self, hour):
+        sp = self.setpoint
+        for h, v in self.schedule:
+            if hour >= h:
+                sp = v
+        return sp
+
     def advance(self, t_end_h, dt, ghi):
         """
         Run the controller from t_end - dt to t_end.
@@ -219,7 +230,7 @@ class FanController:
                 self.t_last_read = tc
             if self.scheduled(tc / 3600.0):
                 self.pid.set_mode(AUTOMATIC, self.reading)
-                self.pid.compute(self.reading, self.setpoint)
+                self.pid.compute(self.reading, self.setpoint_at(tc / 3600.0))
             else:
                 self.pid.set_mode(MANUAL, self.reading)
                 self.pid.output = 0.0
@@ -228,4 +239,5 @@ class FanController:
             self.t_next = tc + self.compute_interval
         speed_sum += speed_now * (t1 - t)
         return {"speed": speed_sum / dt, "pwm": pwm, "input": self.reading,
+                "setpoint": self.setpoint_at(t_end_h),
                 "pid_output": self.pid.output, "pid_integral": self.pid.output_sum}
